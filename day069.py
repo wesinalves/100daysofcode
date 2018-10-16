@@ -1,0 +1,30 @@
+# Assigns ops to the local worker by default.
+    with tf.device(tf.train.replica_device_setter(
+        worker_device="/job:worker/task:%d" % FLAGS.task_index,
+        cluster=cluster)):
+
+      # Build model...
+      loss = ...
+      global_step = tf.contrib.framework.get_or_create_global_step()
+
+      train_op = tf.train.AdagradOptimizer(0.01).minimize(
+          loss, global_step=global_step)
+
+    # The StopAtStepHook handles stopping after running given steps.
+    hooks=[tf.train.StopAtStepHook(last_step=1000000)]
+
+    # The MonitoredTrainingSession takes care of session initialization,
+    # restoring from a checkpoint, saving to a checkpoint, and closing when done
+    # or an error occurs.
+    with tf.train.MonitoredTrainingSession(master=server.target,
+                                           is_chief=(FLAGS.task_index == 0),
+                                           checkpoint_dir="/tmp/train_logs",
+                                           hooks=hooks) as mon_sess:
+      while not mon_sess.should_stop():
+        # Run a training step asynchronously.
+        # See <a href="../api_docs/python/tf/train/SyncReplicasOptimizer">
+        #<code>tf.train.SyncReplicasOptimizer</code></a> 
+        #for additional details on how to
+        # perform *synchronous* training.
+        # mon_sess.run handles AbortedError in case of preempted PS.
+        mon_sess.run(train_op)
